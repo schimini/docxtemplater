@@ -69,18 +69,20 @@ function walk(dir) {
 }
 
 function createXmlTemplaterDocxNoRender(content, options = {}) {
-	const doc = makeDocx("temporary.docx", content);
-	doc.setOptions(options);
-	doc.setData(options.tags);
-	return doc;
+	return makeDocx("temporary.docx", content).then(doc => {
+		doc.setOptions(options);
+		doc.setData(options.tags);
+		return doc;
+	});
 }
 
 function createXmlTemplaterDocx(content, options = {}) {
-	const doc = makeDocx("temporary.docx", content);
-	doc.setOptions(options);
-	doc.setData(options.tags);
-	doc.render();
-	return doc;
+	return makeDocx("temporary.docx", content).then(doc => {
+		doc.setOptions(options);
+		doc.setData(options.tags);
+		doc.render();
+		return doc;
+	});
 }
 
 function writeFile(expectedName, zip) {
@@ -370,12 +372,13 @@ function expectToThrow(fn, type, expectedError) {
 }
 
 function load(name, content, fileType, obj) {
-	const zip = new JSZip(content);
-	obj[name] = new Docxtemplater();
-	obj[name].loadZip(zip);
-	obj[name].loadedName = name;
-	obj[name].loadedContent = content;
-	return obj[name];
+	return JSZip.loadAsync(content).then((zip) => {
+		obj[name] = new Docxtemplater();
+		obj[name].loadZip(zip);
+		obj[name].loadedName = name;
+		obj[name].loadedContent = content;
+		return obj[name];
+	});
 }
 function loadDocument(name, content) {
 	return load(name, content, "docx", docX);
@@ -495,9 +498,11 @@ function removeSpaces(text) {
 
 function makeDocx(name, content) {
 	const zip = new JSZip();
-	zip.file("word/document.xml", content, { createFolders: true });
-	const base64 = zip.generate({ type: "string" });
-	return load(name, base64, "docx", docX);
+	zip.file("word/document.xml", content, { createFolders: true }).then(() => {
+		return zip.generateAsync({ type: "string" });
+	}).then((base64) => {
+		return load(name, base64, "docx", docX);
+	});
 }
 
 function createDoc(name) {

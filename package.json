@@ -44,7 +44,7 @@
     "eslint-plugin-dependencies": "^2.4.0",
     "eslint_d": "^7.3.0",
     "finalhandler": "^1.1.1",
-    "jszip": "^2.6.1",
+    "jszip": "^3.2.1",
     "lodash": "^4.17.11",
     "mkdirp": "^0.5.1",
     "mocha": "^5.0.0",

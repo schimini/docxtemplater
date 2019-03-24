@@ -23,12 +23,14 @@ function getLength(obj) {
 describe("Loading", function() {
 	describe("ajax done correctly", function() {
 		it("doc and img Data should have the expected length", function() {
-			const doc = createDoc("tag-example.docx");
-			expect(getLength(doc.loadedContent)).to.be.equal(19424);
+			return createDoc("tag-example.docx").then((doc) => {
+				expect(getLength(doc.loadedContent)).to.be.equal(19424);
+			});
 		});
 		it("should have the right number of files (the docx unzipped)", function() {
-			const doc = createDoc("tag-example.docx");
-			expect(Object.keys(doc.zip.files).length).to.be.equal(16);
+			return createDoc("tag-example.docx").then((doc) => {
+				expect(Object.keys(doc.zip.files).length).to.be.equal(16);
+			});
 		});
 	});
 	describe("basic loading", function() {
@@ -39,232 +41,249 @@ describe("Loading", function() {
 	});
 	describe("content_loading", function() {
 		it("should load the right content for the footer", function() {
-			const doc = createDoc("tag-example.docx");
-			const fullText = doc.getFullText("word/footer1.xml");
-			expect(fullText.length).not.to.be.equal(0);
-			expect(fullText).to.be.equal("{last_name}{first_name}{phone}");
+			return createDoc("tag-example.docx").then(doc => {
+				return doc.getFullText("word/footer1.xml");
+			}).then(fullText => {
+				expect(fullText.length).not.to.be.equal(0);
+				expect(fullText).to.be.equal("{last_name}{first_name}{phone}");
+			});
 		});
 		it("should load the right content for the document", function() {
-			const doc = createDoc("tag-example.docx");
-			const fullText = doc.getFullText();
-			expect(fullText).to.be.equal("{last_name} {first_name}");
+			return createDoc("tag-example.docx").then(doc => {
+				return doc.getFullText();
+			}).then(fullText => {
+				expect(fullText).to.be.equal("{last_name} {first_name}");
+			});
 		});
 		it("should load the right template files for the document", function() {
-			const doc = createDoc("tag-example.docx");
-			const templatedFiles = doc.getTemplatedFiles();
-			expect(templatedFiles).to.be.eql([
-				"word/header1.xml",
-				"word/footer1.xml",
-				"docProps/core.xml",
-				"docProps/app.xml",
-				"word/document.xml",
-				"word/document2.xml",
-			]);
+			return createDoc("tag-example.docx").then(doc => {
+				const templatedFiles = doc.getTemplatedFiles();
+				expect(templatedFiles).to.be.eql([
+					"word/header1.xml",
+					"word/footer1.xml",
+					"docProps/core.xml",
+					"docProps/app.xml",
+					"word/document.xml",
+					"word/document2.xml",
+				]);
+			});
 		});
 	});
 	describe("output and input", function() {
 		it("should be the same", function() {
-			const zip = new JSZip(createDoc("tag-example.docx").loadedContent);
-			const doc = new Docxtemplater().loadZip(zip);
-			const output = doc.getZip().generate({ type: "base64" });
-			expect(output.length).to.be.equal(90732);
-			expect(output.substr(0, 50)).to.be.equal(
-				"UEsDBAoAAAAAAAAAIQAMTxYSlgcAAJYHAAATAAAAW0NvbnRlbn"
-			);
+			return createDoc("tag-example.docx").then(doc => {
+				return JSZip.loadAsync(doc.loadedContent);
+			}).then(zip => {
+				const doc = new Docxtemplater().loadZip(zip);
+				return doc.getZip().generateAsync({ type: "base64" });
+			}).then(output => {
+				expect(output.length).to.be.equal(90732);
+				expect(output.substr(0, 50)).to.be.equal(
+					"UEsDBAoAAAAAAAAAIQAMTxYSlgcAAJYHAAATAAAAW0NvbnRlbn"
+				);
+			});
 		});
 	});
 });
 
 describe("Api versioning", function() {
 	it("should work with valid numbers", function() {
-		const doc = createDoc("tag-example.docx");
-		expect(doc.verifyApiVersion("3.6.0")).to.be.equal(true);
-		expect(doc.verifyApiVersion("3.5.0")).to.be.equal(true);
-		expect(doc.verifyApiVersion("3.4.2")).to.be.equal(true);
-		expect(doc.verifyApiVersion("3.4.22")).to.be.equal(true);
+		return createDoc("tag-example.docx").then(doc => {
+			expect(doc.verifyApiVersion("3.6.0")).to.be.equal(true);
+			expect(doc.verifyApiVersion("3.5.0")).to.be.equal(true);
+			expect(doc.verifyApiVersion("3.4.2")).to.be.equal(true);
+			expect(doc.verifyApiVersion("3.4.22")).to.be.equal(true);
+		});
 	});
 
 	it("should fail with invalid versions", function() {
-		const doc = createDoc("tag-example.docx");
-		expectToThrow(
-			doc.verifyApiVersion.bind(null, "5.6.0"),
-			Errors.XTAPIVersionError,
-			{
-				message:
-					"The major api version do not match, you probably have to update docxtemplater with npm install --save docxtemplater",
-				name: "APIVersionError",
-				properties: {
-					id: "api_version_error",
-					currentModuleApiVersion: [3, 10, 0],
-					neededVersion: [5, 6, 0],
-				},
-			}
-		);
-
-		expectToThrow(
-			doc.verifyApiVersion.bind(null, "3.44.0"),
-			Errors.XTAPIVersionError,
-			{
-				message:
-					"The minor api version is not uptodate, you probably have to update docxtemplater with npm install --save docxtemplater",
-				name: "APIVersionError",
-				properties: {
-					id: "api_version_error",
-					currentModuleApiVersion: [3, 10, 0],
-					neededVersion: [3, 44, 0],
-				},
-			}
-		);
+		return createDoc("tag-example.docx").then(doc => {
+			expectToThrow(
+				doc.verifyApiVersion.bind(null, "5.6.0"),
+				Errors.XTAPIVersionError,
+				{
+					message:
+						"The major api version do not match, you probably have to update docxtemplater with npm install --save docxtemplater",
+					name: "APIVersionError",
+					properties: {
+						id: "api_version_error",
+						currentModuleApiVersion: [3, 10, 0],
+						neededVersion: [5, 6, 0],
+					},
+				}
+			);
+			expectToThrow(
+				doc.verifyApiVersion.bind(null, "3.44.0"),
+				Errors.XTAPIVersionError,
+				{
+					message:
+						"The minor api version is not uptodate, you probably have to update docxtemplater with npm install --save docxtemplater",
+					name: "APIVersionError",
+					properties: {
+						id: "api_version_error",
+						currentModuleApiVersion: [3, 10, 0],
+						neededVersion: [3, 44, 0],
+					},
+				}
+			);
+		});
 	});
 });
 
 describe("Inspect module", function() {
 	it("should get main tags", function() {
-		const doc = createDoc("tag-loop-example.docx");
-		const iModule = inspectModule();
-		doc.attachModule(iModule);
-		doc.compile();
-		expect(iModule.getTags()).to.be.deep.equal({
-			offre: {
-				nom: {},
-				prix: {},
-				titre: {},
-			},
-			nom: {},
-			prenom: {},
-		});
-		const data = { offre: [{}], prenom: "John" };
-		doc.setData(data);
-		doc.render();
-		const { summary, detail } = iModule.fullInspected[
-			"word/document.xml"
-		].nullValues;
+		return createDoc("tag-loop-example.docx").then(doc => {
+			const iModule = inspectModule();
+			doc.attachModule(iModule);
+			doc.compile().then(() => {
+				expect(iModule.getTags()).to.be.deep.equal({
+					offre: {
+						nom: {},
+						prix: {},
+						titre: {},
+					},
+					nom: {},
+					prenom: {},
+				});
+				const data = { offre: [{}], prenom: "John" };
+				doc.setData(data);
+				doc.render().then(() => {
+					const { summary, detail } = iModule.fullInspected[
+						"word/document.xml"
+						].nullValues;
 
-		expect(iModule.inspect.tags).to.be.deep.equal(data);
-		expect(detail).to.be.an("array");
-		expect(summary).to.be.deep.equal([
-			["offre", "nom"],
-			["offre", "prix"],
-			["offre", "titre"],
-			["nom"],
-		]);
+					expect(iModule.inspect.tags).to.be.deep.equal(data);
+					expect(detail).to.be.an("array");
+					expect(summary).to.be.deep.equal([
+						["offre", "nom"],
+						["offre", "prix"],
+						["offre", "titre"],
+						["nom"],
+					]);
+				});
+			});
+		});
 	});
-
 	it("should get all tags", function() {
-		const doc = createDoc("multi-page.pptx");
-		const iModule = inspectModule();
-		doc.attachModule(iModule);
-		doc.compile();
-		expect(iModule.getFileType()).to.be.deep.equal("pptx");
-		expect(iModule.getAllTags()).to.be.deep.equal({
-			tag: {},
-			users: {
-				name: {},
-			},
+		return createDoc("multi-page.pptx").then(doc => {
+			const iModule = inspectModule();
+			doc.attachModule(iModule);
+			doc.compile().then(() => {
+				expect(iModule.getFileType()).to.be.deep.equal("pptx");
+				expect(iModule.getAllTags()).to.be.deep.equal({
+					tag: {},
+					users: {
+						name: {},
+					},
+				});
+				expect(iModule.getTemplatedFiles()).to.be.deep.equal([
+					"ppt/slides/slide1.xml",
+					"ppt/slides/slide2.xml",
+					"ppt/slideMasters/slideMaster1.xml",
+					"ppt/presentation.xml",
+					"docProps/app.xml",
+					"docProps/core.xml",
+				]);
+			});
 		});
-		expect(iModule.getTemplatedFiles()).to.be.deep.equal([
-			"ppt/slides/slide1.xml",
-			"ppt/slides/slide2.xml",
-			"ppt/slideMasters/slideMaster1.xml",
-			"ppt/presentation.xml",
-			"docProps/app.xml",
-			"docProps/core.xml",
-		]);
 	});
 
 	it("should get all tags and merge them", function() {
-		const doc = createDoc("multi-page-to-merge.pptx");
-		const iModule = inspectModule();
-		doc.attachModule(iModule);
-		doc.compile();
-		expect(iModule.getAllTags()).to.be.deep.equal({
-			tag: {},
-			users: {
-				name: {},
-				age: {},
-				company: {},
-			},
+		return createDoc("multi-page-to-merge.pptx").then(doc => {
+			const iModule = inspectModule();
+			doc.attachModule(iModule);
+			doc.compile().then(() => {
+				expect(iModule.getAllTags()).to.be.deep.equal({
+					tag: {},
+					users: {
+						name: {},
+						age: {},
+						company: {},
+					},
+				});
+			});
 		});
 	});
 
 	it("should get all tags with additional data", function() {
-		const doc = createDoc("tag-product-loop.docx");
-		const iModule = inspectModule();
-		doc.attachModule(iModule);
-		doc.compile();
-		expect(iModule.getAllStructuredTags()).to.be.deep.equal([
-			{
-				type: "placeholder",
-				value: "products",
-				raw: "#products",
-				lIndex: 15,
-				module: "loop",
-				inverted: false,
-				offset: 0,
-				endLindex: 15,
-				subparsed: [
-					{
-						type: "placeholder",
-						value: "title",
-						offset: 11,
-						endLindex: 31,
-						lIndex: 31,
-					},
-					{
-						type: "placeholder",
-						value: "name",
-						offset: 33,
-						endLindex: 55,
-						lIndex: 55,
-					},
-					{
-						type: "placeholder",
-						value: "reference",
-						offset: 59,
-						endLindex: 71,
-						lIndex: 71,
-					},
-					{
-						type: "placeholder",
-						value: "avantages",
-						module: "loop",
-						raw: "#avantages",
-						inverted: false,
-						offset: 70,
-						endLindex: 89,
-						lIndex: 89,
-						subparsed: [
-							{
-								type: "placeholder",
-								value: "title",
-								offset: 82,
-								endLindex: 105,
-								lIndex: 105,
-							},
-							{
-								type: "placeholder",
-								value: "proof",
-								module: "loop",
-								raw: "#proof",
-								inverted: false,
-								offset: 117,
-								endLindex: 133,
-								lIndex: 133,
-								subparsed: [
-									{
-										type: "placeholder",
-										value: "reason",
-										offset: 143,
-										endLindex: 155,
-										lIndex: 155,
-									},
-								],
-							},
-						],
-					},
-				],
-			},
-		]);
+		createDoc("tag-product-loop.docx").then(doc => {
+			const iModule = inspectModule();
+			doc.attachModule(iModule);
+			doc.compile();
+			expect(iModule.getAllStructuredTags()).to.be.deep.equal([
+				{
+					type: "placeholder",
+					value: "products",
+					raw: "#products",
+					lIndex: 15,
+					module: "loop",
+					inverted: false,
+					offset: 0,
+					endLindex: 15,
+					subparsed: [
+						{
+							type: "placeholder",
+							value: "title",
+							offset: 11,
+							endLindex: 31,
+							lIndex: 31,
+						},
+						{
+							type: "placeholder",
+							value: "name",
+							offset: 33,
+							endLindex: 55,
+							lIndex: 55,
+						},
+						{
+							type: "placeholder",
+							value: "reference",
+							offset: 59,
+							endLindex: 71,
+							lIndex: 71,
+						},
+						{
+							type: "placeholder",
+							value: "avantages",
+							module: "loop",
+							raw: "#avantages",
+							inverted: false,
+							offset: 70,
+							endLindex: 89,
+							lIndex: 89,
+							subparsed: [
+								{
+									type: "placeholder",
+									value: "title",
+									offset: 82,
+									endLindex: 105,
+									lIndex: 105,
+								},
+								{
+									type: "placeholder",
+									value: "proof",
+									module: "loop",
+									raw: "#proof",
+									inverted: false,
+									offset: 117,
+									endLindex: 133,
+									lIndex: 133,
+									subparsed: [
+										{
+											type: "placeholder",
+											value: "reason",
+											offset: 143,
+											endLindex: 155,
+											lIndex: 155,
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			]);
+		});
 	});
 });
 

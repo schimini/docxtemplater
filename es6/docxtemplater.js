@@ -1,5 +1,4 @@
 "use strict";
-
 const DocUtils = require("./doc-utils");
 DocUtils.traits = require("./traits");
 DocUtils.moduleWrapper = require("./module-wrapper");
@@ -27,16 +26,18 @@ const Docxtemplater = class Docxtemplater {
 	constructor() {
 		if (arguments.length > 0) {
 			throw new Error(
-				"The constructor with parameters has been removed in docxtemplater 3, please check the upgrade guide."
+				"The constructor with parameters has been removed in docxtemplater 3, please check the upgrade guide.",
 			);
 		}
 		this.compiled = {};
 		this.modules = [];
 		this.setOptions({});
 	}
+
 	getModuleApiVersion() {
 		return currentModuleApiVersion.join(".");
 	}
+
 	verifyApiVersion(neededVersion) {
 		neededVersion = neededVersion.split(".").map(function(i) {
 			return parseInt(i, 10);
@@ -54,9 +55,9 @@ const Docxtemplater = class Docxtemplater {
 					neededVersion,
 					currentModuleApiVersion,
 					explanation: `moduleAPIVersionMismatch : needed=${neededVersion.join(
-						"."
+						".",
 					)}, current=${currentModuleApiVersion.join(".")}`,
-				}
+				},
 			);
 		}
 		if (neededVersion[1] > currentModuleApiVersion[1]) {
@@ -66,23 +67,26 @@ const Docxtemplater = class Docxtemplater {
 					neededVersion,
 					currentModuleApiVersion,
 					explanation: `moduleAPIVersionMismatch : needed=${neededVersion.join(
-						"."
+						".",
 					)}, current=${currentModuleApiVersion.join(".")}`,
-				}
+				},
 			);
 		}
 		return true;
 	}
+
 	setModules(obj) {
 		this.modules.forEach(module => {
 			module.set(obj);
 		});
 	}
+
 	sendEvent(eventName) {
 		this.modules.forEach(module => {
 			module.on(eventName);
 		});
 	}
+
 	attachModule(module, options = {}) {
 		const { prefix } = options;
 		if (prefix) {
@@ -93,6 +97,7 @@ const Docxtemplater = class Docxtemplater {
 		wrappedModule.on("attached");
 		return this;
 	}
+
 	setOptions(options) {
 		if (options.delimiters) {
 			options.delimiters.start = utf8ToWord(options.delimiters.start);
@@ -110,12 +115,13 @@ const Docxtemplater = class Docxtemplater {
 		}
 		return this;
 	}
+
 	loadZip(zip) {
-		if (zip.loadAsync) {
+		/* if (zip.loadAsync) {
 			throw new XTInternalError(
 				"Docxtemplater doesn't handle JSZip version >=3, see changelog"
 			);
-		}
+		} */
 		this.zip = zip;
 		this.updateFileTypeConfig();
 
@@ -127,52 +133,59 @@ const Docxtemplater = class Docxtemplater {
 		]);
 		return this;
 	}
+
 	compileFile(fileName) {
-		const currentFile = this.createTemplateClass(fileName);
-		currentFile.parse();
-		this.compiled[fileName] = currentFile;
+		return this.createTemplateClass(fileName).then(currentFile => {
+			currentFile.parse();
+			this.compiled[fileName] = currentFile;
+		});
 	}
+
 	resolveData(data) {
 		return Promise.all(
 			Object.keys(this.compiled).map(from => {
 				const currentFile = this.compiled[from];
 				return currentFile.resolveTags(data);
-			})
+			}),
 		).then(resolved => {
 			return concatArrays(resolved);
 		});
 	}
+
 	compile() {
 		if (Object.keys(this.compiled).length) {
-			return this;
+			return Promise.resolve();
 		}
 		this.options = this.modules.reduce((options, module) => {
 			return module.optionsTransformer(options, this);
 		}, this.options);
 		this.options.xmlFileNames = unique(this.options.xmlFileNames);
-		this.xmlDocuments = this.options.xmlFileNames.reduce(
-			(xmlDocuments, fileName) => {
-				const content = this.zip.files[fileName].asText();
+		const xmlDocuments = {};
+		return Promise.all(this.options.xmlFileNames.map((fileName) => {
+			return this.zip.files[fileName].async("string").then(content => {
 				xmlDocuments[fileName] = str2xml(content);
-				return xmlDocuments;
-			},
-			{}
-		);
-		this.setModules({
-			zip: this.zip,
-			xmlDocuments: this.xmlDocuments,
+			});
+		})).then(() => {
+			this.xmlDocuments = xmlDocuments;
+			this.setModules({
+				zip: this.zip,
+				xmlDocuments: this.xmlDocuments,
+			});
+			this.getTemplatedFiles();
+			this.setModules({ compiled: this.compiled });
+			// Loop inside all templatedFiles (ie xml files with content).
+			// Sometimes they don't exist (footer.xml for example)
+			return Promise.all(this.templatedFiles.map((fileName) => {
+				if (this.zip.files[fileName] != null) {
+					return this.compileFile(fileName);
+				}
+				return Promise.resolve();
+			})).then(() => {
+				return this;
+			});
 		});
-		this.getTemplatedFiles();
-		this.setModules({ compiled: this.compiled });
-		// Loop inside all templatedFiles (ie xml files with content).
-		// Sometimes they don't exist (footer.xml for example)
-		this.templatedFiles.forEach(fileName => {
-			if (this.zip.files[fileName] != null) {
-				this.compileFile(fileName);
-			}
-		});
-		return this;
 	}
+
 	updateFileTypeConfig() {
 		let fileType;
 		if (this.zip.files.mimetype) {
@@ -200,34 +213,37 @@ const Docxtemplater = class Docxtemplater {
 			Docxtemplater.FileTypeConfig[this.fileType];
 		return this;
 	}
+
 	render() {
-		this.compile();
-		this.setModules({
-			data: this.data,
-			Lexer,
-		});
-		this.mapper = this.modules.reduce(function(value, module) {
-			return module.getRenderedMap(value);
-		}, {});
+		return this.compile().then(() => {
+			this.setModules({
+				data: this.data,
+				Lexer,
+			});
+			this.mapper = this.modules.reduce(function(value, module) {
+				return module.getRenderedMap(value);
+			}, {});
 
-		this.fileTypeConfig.tagsXmlLexedArray = unique(
-			this.fileTypeConfig.tagsXmlLexedArray
-		);
-		this.fileTypeConfig.tagsXmlTextArray = unique(
-			this.fileTypeConfig.tagsXmlTextArray
-		);
+			this.fileTypeConfig.tagsXmlLexedArray = unique(
+				this.fileTypeConfig.tagsXmlLexedArray,
+			);
+			this.fileTypeConfig.tagsXmlTextArray = unique(
+				this.fileTypeConfig.tagsXmlTextArray,
+			);
 
-		Object.keys(this.mapper).forEach(to => {
-			const { from, data } = this.mapper[to];
-			const currentFile = this.compiled[from];
-			currentFile.setTags(data);
-			currentFile.render(to);
-			this.zip.file(to, currentFile.content, { createFolders: true });
+			Object.keys(this.mapper).forEach(to => {
+				const { from, data } = this.mapper[to];
+				const currentFile = this.compiled[from];
+				currentFile.setTags(data);
+				currentFile.render(to);
+				this.zip.file(to, currentFile.content, { createFolders: true });
+			});
+			this.sendEvent("syncing-zip");
+			this.syncZip();
+			return this;
 		});
-		this.sendEvent("syncing-zip");
-		this.syncZip();
-		return this;
 	}
+
 	syncZip() {
 		Object.keys(this.xmlDocuments).forEach(fileName => {
 			this.zip.remove(fileName);
@@ -235,17 +251,22 @@ const Docxtemplater = class Docxtemplater {
 			return this.zip.file(fileName, content, { createFolders: true });
 		});
 	}
+
 	setData(data) {
 		this.data = data;
 		return this;
 	}
+
 	getZip() {
 		return this.zip;
 	}
+
 	createTemplateClass(path) {
-		const usedData = this.zip.files[path].asText();
-		return this.createTemplateClassFromContent(usedData, path);
+		return this.zip.files[path].async("text").then(usedData => {
+			return this.createTemplateClassFromContent(usedData, path);
+		});
 	}
+
 	createTemplateClassFromContent(content, filePath) {
 		const xmltOptions = {
 			filePath,
@@ -257,11 +278,13 @@ const Docxtemplater = class Docxtemplater {
 		xmltOptions.modules = this.modules;
 		return new Docxtemplater.XmlTemplater(content, xmltOptions);
 	}
+
 	getFullText(path) {
 		return this.createTemplateClass(
-			path || this.fileTypeConfig.textPath(this.zip)
-		).getFullText();
+			path || this.fileTypeConfig.textPath(this.zip),
+		).then(res => res.getFullText());
 	}
+
 	getTemplatedFiles() {
 		this.templatedFiles = this.fileTypeConfig.getTemplatedFiles(this.zip);
 		return this.templatedFiles;
