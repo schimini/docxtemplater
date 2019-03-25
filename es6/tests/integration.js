@@ -75,61 +75,87 @@ const angularParser = require("./angular-parser");
 const Errors = require("../errors.js");
 
 describe("Pptx generation", function() {
-	it("should work with title", function() {
-		const doc = createDoc("title-example.pptx");
-		let con = doc.getZip().files["docProps/app.xml"].asText();
-		expect(con).not.to.contain("Edgar");
-		doc.setData({ name: "Edgar" }).render();
-		con = doc.getZip().files["docProps/app.xml"].asText();
-		expect(con).to.contain("Edgar");
+	it("should work with title", function(done) {
+		createDoc("title-example.pptx")
+			.then(doc => {
+				doc.getZip().files["docProps/app.xml"].async("string").then(con => {
+					expect(con).not.to.contain("Edgar");
+					return doc.setData({ name: "Edgar" }).render();
+				}).then(() => {
+					doc.getZip().files["docProps/app.xml"].async("string").then(con => {
+						expect(con).to.contain("Edgar");
+						done();
+					});
+				});
+			});
 	});
-	it("should work with simple pptx", function() {
-		const doc = createDoc("simple-example.pptx");
-		doc.setData({ name: "Edgar" }).render();
-		expect(doc.getFullText()).to.be.equal("Hello Edgar");
+	it("should work with simple pptx", function(done) {
+		createDoc("simple-example.pptx")
+			.then(doc => doc.setData({ name: "Edgar" }).render().then(() => doc.getFullText()))
+			.then(fullText => {
+				expect(fullText).to.be.equal("Hello Edgar");
+				done();
+			});
 	});
-	it("should work with table pptx", function() {
-		const doc = createDoc("table-example.pptx");
-		doc
-			.setData({
-				users: [{ msg: "hello", name: "mary" }, { msg: "hello", name: "john" }],
-			})
-			.render();
-		shouldBeSame({ doc, expectedName: "expected-table-example.pptx" });
+	it("should work with table pptx", function(done) {
+		createDoc("table-example.pptx")
+			.then(doc => {
+				doc
+					.setData({
+						users: [{ msg: "hello", name: "mary" }, { msg: "hello", name: "john" }],
+					})
+					.render()
+					.then(() => {
+						shouldBeSame({ doc, expectedName: "expected-table-example.pptx" });
+						done();
+					});
+			});
 	});
-	it("should work with loop pptx", function() {
-		const doc = createDoc("loop-example.pptx");
-		doc.setData({ users: [{ name: "Doe" }, { name: "John" }] }).render();
-		expect(doc.getFullText()).to.be.equal(" Doe  John ");
-		shouldBeSame({ doc, expectedName: "expected-loop-example.pptx" });
+	it("should work with loop pptx", function(done) {
+		createDoc("loop-example.pptx")
+			.then(doc => {
+				doc.setData({ users: [{ name: "Doe" }, { name: "John" }] }).render().then(() => {
+					doc.getFullText().then(fulltext => {
+						expect(fulltext).to.be.equal(" Doe  John ");
+						shouldBeSame({ doc, expectedName: "expected-loop-example.pptx" });
+						done();
+					});
+				});
+			});
 	});
 
-	it("should work with simple raw pptx", function() {
-		const doc = createDoc("raw-xml-example.pptx");
-		let scope, meta, tag;
-		let calls = 0;
-		doc.setOptions({
-			parser: t => {
-				tag = t;
-				return {
-					get: (s, m) => {
-						scope = s;
-						meta = m.meta;
-						calls++;
-						return scope[tag];
+	it("should work with simple raw pptx", function(done) {
+		createDoc("raw-xml-example.pptx")
+			.then(doc => {
+				let scope, meta, tag;
+				let calls = 0;
+				doc.setOptions({
+					parser: t => {
+						tag = t;
+						return {
+							get: (s, m) => {
+								scope = s;
+								meta = m.meta;
+								calls++;
+								return scope[tag];
+							},
+						};
 					},
-				};
-			},
+				});
+				doc.setData({ raw }).render().then(() => {
+					doc.getFullText().then(fullText => {
+						expect(calls).to.equal(1);
+						expect(scope.raw).to.be.a("string");
+						expect(meta).to.be.an("object");
+						expect(meta.part).to.be.an("object");
+						expect(meta.part.expanded).to.be.an("array");
+						expect(fullText).to.be.equal("Hello World");
+						shouldBeSame({ doc, expectedName: "expected-raw-xml-example.pptx" });
+						done();
+					});
+				});
+			});
 		});
-		doc.setData({ raw }).render();
-		expect(calls).to.equal(1);
-		expect(scope.raw).to.be.a("string");
-		expect(meta).to.be.an("object");
-		expect(meta.part).to.be.an("object");
-		expect(meta.part.expanded).to.be.an("array");
-		expect(doc.getFullText()).to.be.equal("Hello World");
-		shouldBeSame({ doc, expectedName: "expected-raw-xml-example.pptx" });
-	});
 
 	it("should work with simple raw pptx async", function() {
 		const doc = createDoc("raw-xml-example.pptx");

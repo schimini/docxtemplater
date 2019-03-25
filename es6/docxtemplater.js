@@ -134,11 +134,19 @@ const Docxtemplater = class Docxtemplater {
 		return this;
 	}
 
-	compileFile(fileName) {
-		return this.createTemplateClass(fileName).then(currentFile => {
-			currentFile.parse();
-			this.compiled[fileName] = currentFile;
-		});
+	compileFile(index) {
+		const fileName = this.templatedFiles[index];
+		if (fileName && this.zip.files[fileName]) {
+			return this.createTemplateClass(fileName).then(currentFile => {
+				currentFile.parse();
+				this.compiled[fileName] = currentFile;
+				return this.compileFile(index + 1);
+			});
+		}
+		if (index < this.templatedFiles.length) {
+			return this.compileFile(index + 1);
+		}
+		return Promise.resolve();
 	}
 
 	resolveData(data) {
@@ -154,35 +162,33 @@ const Docxtemplater = class Docxtemplater {
 
 	compile() {
 		if (Object.keys(this.compiled).length) {
-			return Promise.resolve();
+			return Promise.resolve(this);
 		}
 		this.options = this.modules.reduce((options, module) => {
 			return module.optionsTransformer(options, this);
 		}, this.options);
 		this.options.xmlFileNames = unique(this.options.xmlFileNames);
-		const xmlDocuments = {};
-		return Promise.all(this.options.xmlFileNames.map((fileName) => {
-			return this.zip.files[fileName].async("string").then(content => {
-				xmlDocuments[fileName] = str2xml(content);
-			});
-		})).then(() => {
-			this.xmlDocuments = xmlDocuments;
-			this.setModules({
-				zip: this.zip,
-				xmlDocuments: this.xmlDocuments,
-			});
-			this.getTemplatedFiles();
-			this.setModules({ compiled: this.compiled });
-			// Loop inside all templatedFiles (ie xml files with content).
-			// Sometimes they don't exist (footer.xml for example)
-			return Promise.all(this.templatedFiles.map((fileName) => {
-				if (this.zip.files[fileName] != null) {
-					return this.compileFile(fileName);
-				}
-				return Promise.resolve();
-			})).then(() => {
+		this.options.xmlFileNames = unique(this.options.xmlFileNames);
+		this.xmlDocuments = this.options.xmlFileNames.reduce(
+			(xmlDocuments, fileName) => {
+				return this.zip.files[fileName].async("string").then(content => {
+					xmlDocuments[fileName] = str2xml(content);
+					return xmlDocuments;
+				});
+			},
+			{}
+		);
+
+		this.setModules({
+			zip: this.zip,
+			xmlDocuments: this.xmlDocuments,
+		});
+		this.getTemplatedFiles();
+		this.setModules({ compiled: this.compiled });
+		// Loop inside all templatedFiles (ie xml files with content).
+		// Sometimes they don't exist (footer.xml for example)
+		return this.compileFile(0).then(() => {
 				return this;
-			});
 		});
 	}
 

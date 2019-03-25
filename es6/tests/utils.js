@@ -80,28 +80,33 @@ function createXmlTemplaterDocx(content, options = {}) {
 	return makeDocx("temporary.docx", content).then(doc => {
 		doc.setOptions(options);
 		doc.setData(options.tags);
-		doc.render();
-		return doc;
+		return doc.render().then(() => {
+			return doc;
+		});
 	});
 }
 
 function writeFile(expectedName, zip) {
-	const writeFile = path.resolve(examplesDirectory, "..", expectedName);
-	if (fs.writeFileSync) {
-		fs.writeFileSync(
-			writeFile,
-			zip.generate({ type: "nodebuffer", compression: "DEFLATE" })
-		);
-	}
-	if (typeof window !== "undefined" && window.saveAs) {
-		const out = zip.generate({
-			type: "blob",
-			mimeType:
-				"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			compression: "DEFLATE",
-		});
-		saveAs(out, expectedName); // comment to see the error
-	}
+	return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }).then(generatedZip => {
+		const writeFile = path.resolve(examplesDirectory, "..", expectedName);
+		if (fs.writeFileSync) {
+			fs.writeFileSync(
+				writeFile,
+				generatedZip
+			);
+		}
+		if (typeof window !== "undefined" && window.saveAs) {
+			return zip.generateAsync({
+				type: "blob",
+				mimeType:
+					"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				compression: "DEFLATE",
+			}).then(out => {
+				saveAs(out, expectedName);
+			});
+			 // comment to see the error
+		}
+	});
 }
 function unlinkFile(expectedName) {
 	const writeFile = path.resolve(examplesDirectory, "..", expectedName);
@@ -133,7 +138,7 @@ function shouldBeSame(options) {
 	}
 
 	try {
-		uniq(Object.keys(zip.files).concat(Object.keys(expectedZip.files))).map(
+		const result = uniq(Object.keys(zip.files).concat(Object.keys(expectedZip.files))).map(
 			function(filePath) {
 				const suffix = `for "${filePath}"`;
 				expect(expectedZip.files[filePath]).to.be.an(
@@ -152,44 +157,47 @@ function shouldBeSame(options) {
 					expectedZip.files[filePath].options.dir,
 					`IsDir differs ${suffix}`
 				);
-				const text1 = zip.files[filePath].asText().replace(/\n|\t/g, "");
-				const text2 = expectedZip.files[filePath]
-					.asText()
-					.replace(/\n|\t/g, "");
-				if (endsWith(filePath, "/")) {
-					return;
-				}
-				if (filePath.indexOf(".png") !== -1) {
-					expect(text1.length).to.be.equal(
-						text2.length,
-						`Content differs ${suffix}`
-					);
-					expect(text1).to.be.equal(text2, `Content differs ${suffix}`);
-				} else {
-					expect(text1).to.not.match(
-						emptyNamespace,
-						`The file ${filePath} has empty namespaces`
-					);
-					expect(text2).to.not.match(
-						emptyNamespace,
-						`The file ${filePath} has empty namespaces`
-					);
-					if (text1 === text2) {
-						return;
-					}
-					const pText1 = xmlPrettify(text1, options);
-					const pText2 = xmlPrettify(text2, options);
-
-					if (pText1 !== pText2) {
-						const pd = unifiedDiff(pText1, pText2);
-						expect(pText1).to.be.equal(
-							pText2,
-							"Content differs \n" + suffix + "\n" + pd
+				const texts = [];
+				texts.push(zip.files[filePath].async("string"));
+				texts.push(expectedZip.files[filePath].async("string"));
+				return Promise.all(texts).then(texts => {
+					const text1 = texts[0].replace(/\n|\t/g, "");
+					const text2 = texts[1].replace(/\n|\t/g, "");
+					if (filePath.indexOf(".png") !== -1) {
+						expect(text1.length).to.be.equal(
+							text2.length,
+							`Content differs ${suffix}`
 						);
+						expect(text1).to.be.equal(text2, `Content differs ${suffix}`);
+					} else {
+						expect(text1).to.not.match(
+							emptyNamespace,
+							`The file ${filePath} has empty namespaces`
+						);
+						expect(text2).to.not.match(
+							emptyNamespace,
+							`The file ${filePath} has empty namespaces`
+						);
+						if (text1 === text2) {
+							return;
+						}
+						const pText1 = xmlPrettify(text1, options);
+						const pText2 = xmlPrettify(text2, options);
+						if (pText1 !== pText2) {
+							const pd = unifiedDiff(pText1, pText2);
+							expect(pText1).to.be.equal(
+								pText2,
+								"Content differs \n" + suffix + "\n" + pd
+							);
+						}
 					}
-				}
+				});
 			}
 		);
+		return Promise.all(result).then((results) => {
+			unlinkFile(expectedName);
+			return results;
+		});
 	} catch (e) {
 		writeFile(expectedName, zip);
 		console.log(
@@ -200,7 +208,6 @@ function shouldBeSame(options) {
 		);
 		throw e;
 	}
-	unlinkFile(expectedName);
 }
 /* eslint-enable no-console */
 
@@ -372,7 +379,8 @@ function expectToThrow(fn, type, expectedError) {
 }
 
 function load(name, content, fileType, obj) {
-	return JSZip.loadAsync(content).then((zip) => {
+	const zip = new JSZip();
+	return zip.loadAsync(content).then(zip => {
 		obj[name] = new Docxtemplater();
 		obj[name].loadZip(zip);
 		obj[name].loadedName = name;
@@ -498,9 +506,8 @@ function removeSpaces(text) {
 
 function makeDocx(name, content) {
 	const zip = new JSZip();
-	zip.file("word/document.xml", content, { createFolders: true }).then(() => {
-		return zip.generateAsync({ type: "string" });
-	}).then((base64) => {
+	zip.file("word/document.xml", content, { createFolders: true });
+	return zip.generateAsync({type: "string"}).then(base64 => {
 		return load(name, base64, "docx", docX);
 	});
 }
@@ -510,7 +517,7 @@ function createDoc(name) {
 }
 
 function getContent(doc) {
-	return doc.getZip().files["word/document.xml"].asText();
+	return doc.getZip().files["word/document.xml"].async("string");
 }
 
 function resolveSoon(data) {
